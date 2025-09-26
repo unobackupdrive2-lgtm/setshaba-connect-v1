@@ -5,22 +5,40 @@ import {
   StyleSheet,
   TouchableOpacity,
   Alert,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polygon } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
+import ReportMarker from '../../components/map/ReportMarker';
+import ReportModal from '../../components/map/ReportModal';
+import MapFilters from '../../components/map/MapFilters';
+import MapMarkerCluster from '../../components/map/MapMarkerCluster';
 import { useLocation } from '../../hooks/useLocation';
-import municipalityService from '../../services/municipalityService';
 import reportService from '../../services/reportService';
-import { REPORT_CATEGORIES } from '../../config/api';
+import wardService from '../../services/wardService';
+import { useAuth } from '../../hooks/useAuth';
+
+const { width, height } = Dimensions.get('window');
+const CLUSTERING_RADIUS = 50; // pixels
+const LOW_END_DEVICE_THRESHOLD = width * height < 1000000; // Rough threshold for low-end devices
 
 const MapScreen = ({ navigation }) => {
-  const [municipalities, setMunicipalities] = useState([]);
+  const [wardBoundaries, setWardBoundaries] = useState(null);
   const [reports, setReports] = useState([]);
+  const [clusteredReports, setClusteredReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [showPolygons, setShowPolygons] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedStatuses, setSelectedStatuses] = useState([]);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [isLowEndDevice] = useState(LOW_END_DEVICE_THRESHOLD);
   const [mapRegion, setMapRegion] = useState({
     latitude: -26.2041,
     longitude: 28.0473,
@@ -28,23 +46,34 @@ const MapScreen = ({ navigation }) => {
     longitudeDelta: 0.5,
   });
   const { getCurrentLocation } = useLocation();
+  const { user } = useAuth();
 
   useEffect(() => {
     loadMapData();
   }, []);
+
+  useEffect(() => {
+    clusterReports();
+  }, [reports, selectedCategories, selectedStatuses]);
 
   const loadMapData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Load municipalities with GeoJSON data
-      const municipalitiesData = await municipalityService.getMunicipalities(true);
-      setMunicipalities(municipalitiesData);
-
       // Load reports
       const reportsData = await reportService.getReports({ limit: 100 });
       setReports(reportsData.reports);
+
+      // Load ward boundaries if not on low-end device
+      if (!isLowEndDevice) {
+        try {
+          const boundaries = await wardService.getSimplifiedBoundaries(null, 50);
+          setWardBoundaries(boundaries);
+        } catch (boundaryError) {
+          console.log('Could not load ward boundaries:', boundaryError.message);
+        }
+      }
 
       // Try to get user's current location
       try {
@@ -65,63 +94,195 @@ const MapScreen = ({ navigation }) => {
     }
   };
 
-  const handleReportPress = (report) => {
-    navigation.navigate('ReportDetail', { reportId: report.id });
+  const clusterReports = () => {
+    let filteredReports = reports;
+
+    // Apply filters
+    if (selectedCategories.length > 0) {
+      filteredReports = filteredReports.filter(report => 
+        selectedCategories.includes(report.category)
+      );
+    }
+
+    if (selectedStatuses.length > 0) {
+      filteredReports = filteredReports.filter(report => 
+        selectedStatuses.includes(report.status)
+      );
+    }
+
+    // Simple clustering algorithm
+    const clusters = [];
+    const processed = new Set();
+
+    filteredReports.forEach((report, index) => {
+      if (processed.has(index)) return;
+
+      const cluster = {
+        id: `cluster-${index}`,
+        coordinate: {
+          latitude: report.lat,
+          longitude: report.lng,
+        },
+        reports: [report],
+      };
+
+      // Find nearby reports
+      filteredReports.forEach((otherReport, otherIndex) => {
+        if (index === otherIndex || processed.has(otherIndex)) return;
+
+        const distance = getDistance(
+          report.lat, report.lng,
+          otherReport.lat, otherReport.lng
+        );
+
+        // If reports are close enough, add to cluster
+        if (distance < 0.01) { // ~1km threshold
+          cluster.reports.push(otherReport);
+          processed.add(otherIndex);
+        }
+      });
+
+      processed.add(index);
+      clusters.push(cluster);
+    });
+
+    setClusteredReports(clusters);
   };
 
-  const getMarkerColor = (category) => {
-    const categoryData = REPORT_CATEGORIES.find(cat => cat.value === category);
-    switch (category) {
-      case 'water': return '#2196F3';
-      case 'electricity': return '#FFC107';
-      case 'roads': return '#FF5722';
-      case 'waste': return '#4CAF50';
-      case 'safety': return '#F44336';
-      default: return '#9E9E9E';
+  const getDistance = (lat1, lng1, lat2, lng2) => {
+    const R = 6371; // Radius of Earth in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const handleReportPress = (report) => {
+    setSelectedReport(report);
+    setModalVisible(true);
+  };
+
+  const handleClusterPress = (cluster) => {
+    if (cluster.reports.length === 1) {
+      handleReportPress(cluster.reports[0]);
+    } else {
+      // Zoom to cluster area
+      const latitudes = cluster.reports.map(r => r.lat);
+      const longitudes = cluster.reports.map(r => r.lng);
+      
+      const minLat = Math.min(...latitudes);
+      const maxLat = Math.max(...latitudes);
+      const minLng = Math.min(...longitudes);
+      const maxLng = Math.max(...longitudes);
+      
+      const centerLat = (minLat + maxLat) / 2;
+      const centerLng = (minLng + maxLng) / 2;
+      const latDelta = (maxLat - minLat) * 1.5;
+      const lngDelta = (maxLng - minLng) * 1.5;
+      
+      setMapRegion({
+        latitude: centerLat,
+        longitude: centerLng,
+        latitudeDelta: Math.max(latDelta, 0.01),
+        longitudeDelta: Math.max(lngDelta, 0.01),
+      });
     }
   };
 
-  const renderMunicipalityPolygons = () => {
-    return municipalities.map((municipality) => {
-      if (!municipality.bounds || !municipality.bounds.coordinates) {
+  const handleUpvote = async (reportId) => {
+    try {
+      // Refresh reports to get updated upvote counts
+      const reportsData = await reportService.getReports({ limit: 100 });
+      setReports(reportsData.reports);
+      
+      // Update selected report if it's the one being upvoted
+      if (selectedReport && selectedReport.id === reportId) {
+        const updatedReport = reportsData.reports.find(r => r.id === reportId);
+        if (updatedReport) {
+          setSelectedReport(updatedReport);
+        }
+      }
+    } catch (error) {
+      console.error('Error refreshing reports after upvote:', error);
+    }
+  };
+
+  const handleCategoryToggle = (category) => {
+    setSelectedCategories(prev => 
+      prev.includes(category)
+        ? prev.filter(c => c !== category)
+        : [...prev, category]
+    );
+  };
+
+  const handleStatusToggle = (status) => {
+    setSelectedStatuses(prev => 
+      prev.includes(status)
+        ? prev.filter(s => s !== status)
+        : [...prev, status]
+    );
+  };
+
+  const handleClearFilters = () => {
+    setSelectedCategories([]);
+    setSelectedStatuses([]);
+  };
+
+  const renderWardPolygons = () => {
+    if (!showPolygons || !wardBoundaries || isLowEndDevice) {
+      return null;
+    }
+
+    return wardBoundaries.features?.map((feature, index) => {
+      if (!feature.geometry || !feature.geometry.coordinates) {
         return null;
       }
 
       try {
-        const coordinates = municipality.bounds.coordinates[0].map(coord => ({
+        const coordinates = feature.geometry.coordinates[0].map(coord => ({
           latitude: coord[1],
           longitude: coord[0],
         }));
 
         return (
           <Polygon
-            key={municipality.id}
+            key={`ward-${feature.properties.ward_id}-${index}`}
             coordinates={coordinates}
-            strokeColor="#2196F3"
-            strokeWidth={2}
-            fillColor="rgba(33, 150, 243, 0.1)"
+            strokeColor="rgba(33, 150, 243, 0.8)"
+            strokeWidth={1}
+            fillColor="rgba(33, 150, 243, 0.05)"
           />
         );
       } catch (error) {
-        console.log('Error rendering polygon for municipality:', municipality.name);
+        console.log('Error rendering polygon for ward:', feature.properties.name);
         return null;
       }
     });
   };
 
-  const renderReportMarkers = () => {
-    return reports.map((report) => (
-      <Marker
-        key={report.id}
-        coordinate={{
-          latitude: report.lat,
-          longitude: report.lng,
-        }}
-        title={report.title}
-        description={report.description}
-        pinColor={getMarkerColor(report.category)}
-        onCalloutPress={() => handleReportPress(report)}
-      />
+  const renderMarkers = () => {
+    return clusteredReports.map((cluster) => {
+      if (cluster.reports.length === 1) {
+        return (
+          <ReportMarker
+            key={cluster.reports[0].id}
+            report={cluster.reports[0]}
+            onPress={handleReportPress}
+          />
+        );
+      } else {
+        return (
+          <MapMarkerCluster
+            key={cluster.id}
+            coordinate={cluster.coordinate}
+            count={cluster.reports.length}
+            onPress={() => handleClusterPress(cluster)}
+          />
+        );
+      }
     ));
   };
 
@@ -143,13 +304,47 @@ const MapScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Community Map</Text>
-        <TouchableOpacity
-          style={styles.refreshButton}
-          onPress={loadMapData}
-        >
-          <Ionicons name="refresh" size={20} color="#2196F3" />
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={() => setShowFilters(!showFilters)}
+          >
+            <Ionicons 
+              name="filter" 
+              size={20} 
+              color={showFilters ? '#2196F3' : '#666'} 
+            />
+          </TouchableOpacity>
+          {!isLowEndDevice && (
+            <TouchableOpacity
+              style={styles.headerButton}
+              onPress={() => setShowPolygons(!showPolygons)}
+            >
+              <Ionicons 
+                name="map" 
+                size={20} 
+                color={showPolygons ? '#2196F3' : '#666'} 
+              />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={loadMapData}
+          >
+            <Ionicons name="refresh" size={20} color="#666" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {showFilters && (
+        <MapFilters
+          selectedCategories={selectedCategories}
+          selectedStatuses={selectedStatuses}
+          onCategoryToggle={handleCategoryToggle}
+          onStatusToggle={handleStatusToggle}
+          onClearFilters={handleClearFilters}
+        />
+      )}
 
       <MapView
         style={styles.map}
@@ -157,33 +352,43 @@ const MapScreen = ({ navigation }) => {
         onRegionChangeComplete={setMapRegion}
         showsUserLocation={true}
         showsMyLocationButton={true}
+        showsCompass={true}
+        showsScale={true}
+        loadingEnabled={true}
+        maxZoomLevel={18}
+        minZoomLevel={8}
       >
-        {renderMunicipalityPolygons()}
-        {renderReportMarkers()}
+        {renderWardPolygons()}
+        {renderMarkers()}
       </MapView>
 
-      <View style={styles.legend}>
-        <Text style={styles.legendTitle}>Report Categories</Text>
-        <View style={styles.legendItems}>
-          {REPORT_CATEGORIES.slice(0, 3).map((category) => (
-            <View key={category.value} style={styles.legendItem}>
-              <View 
-                style={[
-                  styles.legendColor, 
-                  { backgroundColor: getMarkerColor(category.value) }
-                ]} 
-              />
-              <Text style={styles.legendText}>{category.label}</Text>
-            </View>
-          ))}
+      <ReportModal
+        visible={modalVisible}
+        report={selectedReport}
+        onClose={() => {
+          setModalVisible(false);
+          setSelectedReport(null);
+        }}
+        onUpvote={handleUpvote}
+        onViewDetails={(report) => {
+          navigation.navigate('ReportDetail', { reportId: report.id });
+        }}
+        currentUser={user}
+      />
+
+      {!showFilters && (
+        <View style={styles.legend}>
+          <Text style={styles.legendTitle}>
+            {clusteredReports.length} {clusteredReports.length === 1 ? 'Report' : 'Reports'}
+          </Text>
+          <TouchableOpacity
+            style={styles.viewAllButton}
+            onPress={() => navigation.navigate('Reports')}
+          >
+            <Text style={styles.viewAllText}>View All Reports</Text>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.viewAllButton}
-          onPress={() => navigation.navigate('Reports')}
-        >
-          <Text style={styles.viewAllText}>View All Reports</Text>
-        </TouchableOpacity>
-      </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -208,8 +413,13 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#333',
   },
-  refreshButton: {
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
     padding: 8,
+    marginLeft: 8,
   },
   map: {
     flex: 1,
@@ -236,27 +446,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#333',
     marginBottom: 12,
-  },
-  legendItems: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  legendColor: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  legendText: {
-    fontSize: 12,
-    color: '#666',
-    flex: 1,
   },
   viewAllButton: {
     backgroundColor: '#2196F3',

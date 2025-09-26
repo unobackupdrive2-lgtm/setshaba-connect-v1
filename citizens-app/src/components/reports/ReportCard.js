@@ -47,6 +47,16 @@ const ReportCard = ({ report, onPress, showUpvote = false, onUpvote }) => {
         {report.description}
       </Text>
 
+      {/* Show assigned official if available */}
+      {report.assigned_official_user && (
+        <View style={styles.assignedContainer}>
+          <Ionicons name="person-outline" size={14} color="#2196F3" />
+          <Text style={styles.assignedText}>
+            Assigned to: {report.assigned_official_user.name}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.footer}>
         <View style={styles.locationContainer}>
           <Ionicons name="location-outline" size={14} color="#666" />
@@ -130,6 +140,21 @@ const styles = StyleSheet.create({
     color: '#666',
     lineHeight: 20,
     marginBottom: 12,
+  },
+  assignedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 4,
+  },
+  assignedText: {
+    marginLeft: 4,
+    fontSize: 12,
+    color: '#2196F3',
+    fontWeight: '500',
   },
   footer: {
     flexDirection: 'row',

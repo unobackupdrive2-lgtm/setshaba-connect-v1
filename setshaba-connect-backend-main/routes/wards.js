@@ -5,6 +5,48 @@ import { formatError, formatSuccess } from '../utils/helpers.js';
 
 const router = express.Router();
 
+// Search wards by query
+router.get('/search', async (req, res) => {
+  try {
+    const { query, municipality_id, limit = 10 } = req.query;
+    
+    if (!query || query.length < 2) {
+      return res.json(formatSuccess({ wards: [] }));
+    }
+
+    let wardQuery = supabase
+      .from('wards')
+      .select('id, ward_id, name, municipality_id, properties')
+      .ilike('name', `%${query}%`)
+      .limit(parseInt(limit))
+      .order('name');
+
+    if (municipality_id) {
+      wardQuery = wardQuery.eq('municipality_id', municipality_id);
+    }
+
+    const { data: wards, error } = await wardQuery;
+
+    if (error) return res.status(400).json(formatError('Failed to search wards'));
+
+    // Transform for address suggestions
+    const suggestions = wards.map(ward => ({
+      place_id: ward.id,
+      address: `${ward.name}, Ward ${ward.ward_id}`,
+      latitude: ward.properties?.center_lat || 0,
+      longitude: ward.properties?.center_lng || 0,
+      ward_id: ward.ward_id,
+      municipality_id: ward.municipality_id
+    }));
+
+    res.json(formatSuccess({ wards: suggestions }));
+
+  } catch (error) {
+    console.error('Search wards error:', error);
+    res.status(500).json(formatError('Internal server error'));
+  }
+});
+
 // Get all wards (public endpoint with caching)
 router.get('/', async (req, res) => {
   try {

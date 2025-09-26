@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import AddressInput from '../../components/common/AddressInput';
 import LoadingSpinner from '../../components/common/LoadingSpinner';
 import ErrorMessage from '../../components/common/ErrorMessage';
 import { useAuth } from '../../hooks/useAuth';
@@ -24,7 +25,7 @@ const ProfileScreen = ({ navigation }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
-    home_address: '',
+    addressData: null,
   });
   const { signOut } = useAuth();
 
@@ -40,7 +41,11 @@ const ProfileScreen = ({ navigation }) => {
       setProfile(userData);
       setFormData({
         name: userData.name || '',
-        home_address: userData.home_address || '',
+        addressData: userData.home_address ? {
+          address: userData.home_address,
+          latitude: userData.lat,
+          longitude: userData.lng,
+        } : null,
       });
     } catch (err) {
       setError(err.message);
@@ -53,6 +58,10 @@ const ProfileScreen = ({ navigation }) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleAddressSelect = (addressData) => {
+    updateFormData('addressData', addressData);
+  };
+
   const handleSave = async () => {
     try {
       setUpdating(true);
@@ -61,8 +70,14 @@ const ProfileScreen = ({ navigation }) => {
       if (formData.name !== profile.name) {
         updates.name = formData.name.trim();
       }
-      if (formData.home_address !== profile.home_address) {
-        updates.home_address = formData.home_address.trim();
+      
+      const currentAddress = profile.home_address;
+      const newAddress = formData.addressData?.address;
+      
+      if (newAddress !== currentAddress) {
+        updates.home_address = newAddress || null;
+        updates.lat = formData.addressData?.latitude || null;
+        updates.lng = formData.addressData?.longitude || null;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -84,7 +99,11 @@ const ProfileScreen = ({ navigation }) => {
   const handleCancel = () => {
     setFormData({
       name: profile.name || '',
-      home_address: profile.home_address || '',
+      addressData: profile.home_address ? {
+        address: profile.home_address,
+        latitude: profile.lat,
+        longitude: profile.lng,
+      } : null,
     });
     setIsEditing(false);
   };
@@ -162,14 +181,19 @@ const ProfileScreen = ({ navigation }) => {
                 placeholder="Enter your full name"
               />
 
-              <Input
+              <AddressInput
                 label="Home Address"
-                value={formData.home_address}
-                onChangeText={(value) => updateFormData('home_address', value)}
-                placeholder="Enter your home address"
-                multiline
-                numberOfLines={2}
+                value={formData.addressData}
+                onAddressSelect={handleAddressSelect}
+                placeholder="Enter your home address or use GPS"
+                showGPSOption={true}
               />
+
+              {!formData.addressData && (
+                <Text style={styles.addressHint}>
+                  💡 Adding your address helps us show relevant local issues
+                </Text>
+              )}
 
               <View style={styles.buttonContainer}>
                 <Button
@@ -198,6 +222,11 @@ const ProfileScreen = ({ navigation }) => {
                 <Text style={styles.infoValue}>
                   {profile?.home_address || 'Not provided'}
                 </Text>
+                {!profile?.home_address && (
+                  <Text style={styles.addressReminder}>
+                    💡 Consider adding your address for better local issue recommendations
+                  </Text>
+                )}
               </View>
 
               <View style={styles.infoItem}>
@@ -298,6 +327,14 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 16,
   },
+  addressHint: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: -8,
+    marginBottom: 16,
+    lineHeight: 16,
+  },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -328,6 +365,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     fontWeight: '500',
+  },
+  addressReminder: {
+    fontSize: 12,
+    color: '#2196F3',
+    fontStyle: 'italic',
+    marginTop: 4,
   },
   actions: {
     backgroundColor: '#fff',

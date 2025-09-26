@@ -19,7 +19,13 @@ import reportService from '../../services/reportService';
 
 const ReportsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
-  const { reports, loading, error, refreshReports } = useReports();
+  const [reports, setReports] = useState([]);
+  const { reports: hookReports, loading, error, refreshReports } = useReports();
+
+  // Update local state when reports change
+  useEffect(() => {
+    setReports(hookReports);
+  }, [hookReports]);
 
   useFocusEffect(
     useCallback(() => {

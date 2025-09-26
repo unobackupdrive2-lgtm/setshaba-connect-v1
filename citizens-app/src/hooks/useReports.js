@@ -121,7 +121,14 @@ export const useReport = (reportId) => {
   const upvoteReport = async () => {
     try {
       await reportService.upvoteReport(reportId);
-      await fetchReport(); // Refresh report data
+      // Update local state immediately for better UX
+      setReport(prev => ({
+        ...prev,
+        user_upvoted: true,
+        upvote_count: (prev.upvote_count || 0) + 1
+      }));
+      // Then fetch fresh data
+      setTimeout(() => fetchReport(), 100);
     } catch (err) {
       throw err;
     }
@@ -130,7 +137,14 @@ export const useReport = (reportId) => {
   const removeUpvote = async () => {
     try {
       await reportService.removeUpvote(reportId);
-      await fetchReport(); // Refresh report data
+      // Update local state immediately for better UX
+      setReport(prev => ({
+        ...prev,
+        user_upvoted: false,
+        upvote_count: Math.max((prev.upvote_count || 0) - 1, 0)
+      }));
+      // Then fetch fresh data
+      setTimeout(() => fetchReport(), 100);
     } catch (err) {
       throw err;
     }

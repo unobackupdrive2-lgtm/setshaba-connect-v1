@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Input from '../../components/common/Input';
 import Button from '../../components/common/Button';
+import AddressInput from '../../components/common/AddressInput';
 import { useAuth } from '../../hooks/useAuth';
 
 const SignupScreen = ({ navigation }) => {
@@ -19,13 +20,17 @@ const SignupScreen = ({ navigation }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    homeAddress: '',
+    addressData: null,
   });
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
 
   const updateFormData = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddressSelect = (addressData) => {
+    updateFormData('addressData', addressData);
   };
 
   const validateForm = () => {
@@ -41,13 +46,25 @@ const SignupScreen = ({ navigation }) => {
       return false;
     }
 
-    if (!email.includes('@')) {
+    // Enhanced email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
       Alert.alert('Error', 'Please enter a valid email address');
       return false;
     }
 
-    if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
+    // Enhanced password validation
+    if (password.length < 8) {
+      Alert.alert('Error', 'Password must be at least 8 characters long');
+      return false;
+    }
+
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+    if (!passwordRegex.test(password)) {
+      Alert.alert(
+        'Weak Password', 
+        'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character'
+      );
       return false;
     }
 
@@ -70,7 +87,9 @@ const SignupScreen = ({ navigation }) => {
         email: formData.email.trim(),
         password: formData.password,
         role: 'citizen',
-        home_address: formData.homeAddress.trim() || undefined,
+        home_address: formData.addressData?.address || undefined,
+        lat: formData.addressData?.latitude || undefined,
+        lng: formData.addressData?.longitude || undefined,
       };
 
       await signUp(userData);
@@ -125,7 +144,7 @@ const SignupScreen = ({ navigation }) => {
               label="Password"
               value={formData.password}
               onChangeText={(value) => updateFormData('password', value)}
-              placeholder="Create a password"
+              placeholder="Create a strong password (8+ chars)"
               secureTextEntry
             />
 
@@ -137,14 +156,19 @@ const SignupScreen = ({ navigation }) => {
               secureTextEntry
             />
 
-            <Input
+            <AddressInput
               label="Home Address (Optional)"
-              value={formData.homeAddress}
-              onChangeText={(value) => updateFormData('homeAddress', value)}
-              placeholder="Enter your home address"
-              multiline
-              numberOfLines={2}
+              value={formData.addressData}
+              onAddressSelect={handleAddressSelect}
+              placeholder="Enter your home address or use GPS"
+              showGPSOption={true}
             />
+
+            {!formData.addressData && (
+              <Text style={styles.addressHint}>
+                💡 Adding your address helps us show relevant local issues and improves response times
+              </Text>
+            )}
 
             <Button
               title="Create Account"
@@ -197,6 +221,14 @@ const styles = StyleSheet.create({
   },
   form: {
     width: '100%',
+  },
+  addressHint: {
+    fontSize: 12,
+    color: '#666',
+    fontStyle: 'italic',
+    marginTop: -8,
+    marginBottom: 16,
+    lineHeight: 16,
   },
   signupButton: {
     marginTop: 8,
