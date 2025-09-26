@@ -138,6 +138,7 @@ const AddressInput = ({
         <Text style={styles.label}>
           {label}
           {required && <Text style={styles.required}> *</Text>}
+          }
         </Text>
         {showGPSOption && (
           <TouchableOpacity
