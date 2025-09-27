@@ -5,26 +5,26 @@ export const API_BASE_URL = API_URL;
 
 export const API_ENDPOINTS = {
   // Auth
-  REGISTER: 'api/auth/register',
-  LOGIN: 'api/auth/login',
+  REGISTER: '/api/auth/register',
+  LOGIN: '/api/auth/login',
   
   // Users
-  USER_PROFILE: 'api/users/me',
-  USER_BY_ID: 'api/users',
+  USER_PROFILE: '/api/users/me',
+  USER_BY_ID: '/api/users',
   
   // Reports
-  REPORTS: 'api/reports',
-  MY_REPORTS: 'api/reports/mine',
-  MUNICIPALITY_REPORTS: 'api/reports/municipality',
-  REPORT_UPVOTE: 'api/reports/{id}/upvote',
+  REPORTS: '/api/reports',
+  MY_REPORTS: '/api/reports/mine',
+  MUNICIPALITY_REPORTS: '/api/reports/municipality',
+  REPORT_UPVOTE: '/api/reports/{id}/upvote',
   
   // Municipalities
-  MUNICIPALITIES: 'api/municipalities',
-  MUNICIPALITY_BY_ID: 'api/municipalities/{id}',
-  MUNICIPALITY_REPORTS: 'api/municipalities/{id}/reports',
+  MUNICIPALITIES: '/api/municipalities',
+  MUNICIPALITY_BY_ID: '/api/municipalities/{id}',
+  MUNICIPALITY_REPORTS: '/api/municipalities/{id}/reports',
   
   // Status Updates
-  STATUS_UPDATES: 'api/reports/{reportId}/status',
+  STATUS_UPDATES: '/api/reports/{reportId}/status',
 };
 
 export const REPORT_CATEGORIES = [
