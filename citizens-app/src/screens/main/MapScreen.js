@@ -1,20 +1,27 @@
-// Option 1: Assign to a variable
-const rateLimitError = {
-  code: "rate-limited",
-  message: "You have hit the rate limit. Please upgrade to keep chatting.",
-  providerLimitHit: false,
-  isRetryable: true
+// screens/main/MapScreen.js
+import React from "react";
+import { View, StyleSheet } from "react-native";
+import MapView from "react-native-maps";
+
+const MapScreen = () => {
+  return (
+    <View style={styles.container}>
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: -26.2041,   // Example: Johannesburg
+          longitude: 28.0473,
+          latitudeDelta: 0.1,
+          longitudeDelta: 0.1,
+        }}
+      />
+    </View>
+  );
 };
 
-// You can log it
-console.log(rateLimitError);
+export default MapScreen;
 
-// Option 2: Return from a function
-function getRateLimitError() {
-  return {
-    code: "rate-limited",
-    message: "You have hit the rate limit. Please upgrade to keep chatting.",
-    providerLimitHit: false,
-    isRetryable: true
-  };
-}
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  map: { flex: 1 },
+});
