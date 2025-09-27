@@ -1,30 +1,30 @@
 // API Configuration
-import { API_URL } from '@env';
+// import { API_URL } from '@env';
 
-export const API_BASE_URL = API_URL;
+export const API_BASE_URL = "https://setshaba-connect-backend.onrender.com/api";
 
 export const API_ENDPOINTS = {
   // Auth
-  REGISTER: '/api/auth/register',
-  LOGIN: '/api/auth/login',
+  REGISTER: '/auth/register',
+  LOGIN: '/auth/login',
   
   // Users
-  USER_PROFILE: '/api/users/me',
-  USER_BY_ID: '/api/users',
+  USER_PROFILE: '/users/me',
+  USER_BY_ID: '/users',
   
   // Reports
-  REPORTS: '/api/reports',
-  MY_REPORTS: '/api/reports/mine',
-  MUNICIPALITY_REPORTS: '/api/reports/municipality',
-  REPORT_UPVOTE: '/api/reports/{id}/upvote',
+  REPORTS: '/reports',
+  MY_REPORTS: '/reports/mine',
+  MUNICIPALITY_REPORTS: '/reports/municipality',
+  REPORT_UPVOTE: '/reports/{id}/upvote',
   
   // Municipalities
-  MUNICIPALITIES: '/api/municipalities',
-  MUNICIPALITY_BY_ID: '/api/municipalities/{id}',
-  MUNICIPALITY_REPORTS: '/api/municipalities/{id}/reports',
+  MUNICIPALITIES: '/municipalities',
+  MUNICIPALITY_BY_ID: '/municipalities/{id}',
+  MUNICIPALITY_REPORTS: '/municipalities/{id}/reports',
   
   // Status Updates
-  STATUS_UPDATES: '/api/reports/{reportId}/status',
+  STATUS_UPDATES: '/reports/{reportId}/status',
 };
 
 export const REPORT_CATEGORIES = [
